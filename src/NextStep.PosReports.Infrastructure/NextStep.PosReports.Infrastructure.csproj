@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <!-- AWS adapters (S3, DynamoDB, SQS) behind the abstractions the Lambda functions depend on. -->
+  <!-- AWS adapters (S3, DynamoDB, SQS, API Gateway responses) behind the abstractions the Lambda functions depend on. -->
   <ItemGroup>
+    <PackageReference Include="Amazon.Lambda.APIGatewayEvents" />
     <PackageReference Include="AWSSDK.S3" />
     <PackageReference Include="AWSSDK.DynamoDBv2" />
     <PackageReference Include="AWSSDK.SQS" />
