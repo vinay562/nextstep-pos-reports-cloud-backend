@@ -5,6 +5,7 @@ using Microsoft.Extensions.Time.Testing;
 using NextStep.PosReports.Infrastructure.Storage;
 using NextStep.PosReports.Lambda.ReceivePosReport;
 using NSubstitute;
+using NSubstitute.ExceptionExtensions;
 
 namespace NextStep.PosReports.Lambda.Tests;
 
@@ -58,6 +59,21 @@ public sealed class ReceivePosReportFunctionTests
         Assert.Contains("\"message\":", response.Body);
         await _objectStorage.DidNotReceive().PutTextAsync(
             Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task StorageFailure_IsLoggedWithFlightIdAndRethrown()
+    {
+        _objectStorage
+            .PutTextAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new IOException("S3 unavailable"));
+        var context = new TestLambdaContext();
+
+        await Assert.ThrowsAsync<IOException>(() => _function.HandleAsync(Request(SampleData.RawReport), context));
+
+        var logOutput = ((TestLambdaLogger)context.Logger).Buffer.ToString();
+        Assert.Contains("Failed to store POS report for flight", logOutput);
+        Assert.Contains(SampleData.FlightId, logOutput);
     }
 
     private static APIGatewayHttpApiV2ProxyRequest Request(string? body) => new() { Body = body };

@@ -4,6 +4,7 @@ using NextStep.PosReports.Domain.Models;
 using NextStep.PosReports.Infrastructure.Persistence;
 using NextStep.PosReports.Lambda.GetFlightStatus;
 using NSubstitute;
+using NSubstitute.ExceptionExtensions;
 
 namespace NextStep.PosReports.Lambda.Tests;
 
@@ -55,6 +56,21 @@ public sealed class GetFlightStatusFunctionTests
 
         Assert.Equal(404, response.StatusCode);
         Assert.Equal("""{"message":"No status found for flight 'XX1234'."}""", response.Body);
+    }
+
+    [Fact]
+    public async Task LookupFailure_IsLoggedWithFlightIdAndRethrown()
+    {
+        _calculationResultRepository
+            .GetLatestAsync(SampleData.FlightId, Arg.Any<CancellationToken>())
+            .ThrowsAsync(new InvalidOperationException("DynamoDB unavailable"));
+        var context = new TestLambdaContext();
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => _function.HandleAsync(RequestFor(SampleData.FlightId), context));
+
+        var logOutput = ((TestLambdaLogger)context.Logger).Buffer.ToString();
+        Assert.Contains("Failed to look up status for flight", logOutput);
+        Assert.Contains(SampleData.FlightId, logOutput);
     }
 
     [Fact]

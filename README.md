@@ -205,8 +205,16 @@ function → *Monitor* → *View CloudWatch logs*, or:
 aws logs tail /aws/lambda/<function-name> --follow
 ```
 
-Logs cover important events and errors only: report received or rejected, report parsed, flight calculated,
-low-fuel warning, and failures (with the flight id or message id).
+Logs cover important events and errors only, never every step:
+
+| Function | Information | Warning | Error |
+|---|---|---|---|
+| ReceivePosReport | report received and stored (flight id, key) | report rejected (reason) | storing the report failed |
+| ParsePosReport | report parsed and queued (flight id, attachment key) | – | parsing failed (object key) |
+| CalculateFlightStatus | flight calculated (minutes, fuel) | low fuel at arrival | calculation failed (message id, receive count, body) |
+| GetFlightStatus | – (read endpoint polled by clients, so successful lookups aren't logged) | – | lookup failed (flight id) |
+
+Errors are logged with the exception and then rethrown, so Lambda's error metrics and retries still apply.
 
 ---
 

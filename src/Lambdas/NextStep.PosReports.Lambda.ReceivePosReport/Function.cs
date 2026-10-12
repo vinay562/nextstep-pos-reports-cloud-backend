@@ -57,7 +57,15 @@ public sealed class Function
         }
 
         var objectKey = ObjectKeys.ForRawReport(report.FlightId, receivedAt);
-        await _objectStorage.PutTextAsync(objectKey, rawReport!, PlainTextContentType);
+        try
+        {
+            await _objectStorage.PutTextAsync(objectKey, rawReport!, PlainTextContentType);
+        }
+        catch (Exception exception)
+        {
+            context.Logger.LogError(exception, "Failed to store POS report for flight {FlightId} as {ObjectKey}", report.FlightId, objectKey);
+            throw;
+        }
 
         context.Logger.LogInformation("Received POS report for flight {FlightId}, stored as {ObjectKey}", report.FlightId, objectKey);
 

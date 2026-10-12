@@ -48,6 +48,19 @@ public sealed class Function
             return ApiResponses.Error(HttpStatusCode.BadRequest, "The flightId path parameter is required.");
         }
 
+        try
+        {
+            return await GetLatestStatusAsync(flightId);
+        }
+        catch (Exception exception)
+        {
+            context.Logger.LogError(exception, "Failed to look up status for flight {FlightId}", flightId);
+            throw;
+        }
+    }
+
+    private async Task<APIGatewayHttpApiV2ProxyResponse> GetLatestStatusAsync(string flightId)
+    {
         var latestResult = await _calculationResultRepository.GetLatestAsync(flightId);
         if (latestResult is not null)
         {
