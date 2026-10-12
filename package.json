@@ -10,6 +10,7 @@
     "test:dotnet": "dotnet test NextStep.PosReports.CloudBackend.sln",
     "test:cdk": "jest",
     "test:integration": "jest --config jest.integration.config.js",
+    "smoke-test": "./scripts/smoke-test.sh",
     "synth": "npm run build:lambdas && cdk synth",
     "diff": "npm run build:lambdas && cdk diff",
     "deploy": "npm run build:lambdas && cdk deploy --outputs-file cdk.outputs/outputs.json",
@@ -17,6 +18,10 @@
     "cdk": "cdk"
   },
   "devDependencies": {
+    "@aws-sdk/client-dynamodb": "^3.1147.0",
+    "@aws-sdk/client-s3": "^3.1147.0",
+    "@aws-sdk/client-sqs": "^3.1147.0",
+    "@aws-sdk/lib-dynamodb": "^3.1147.0",
     "@swc/core": "^1.15.0",
     "@swc/jest": "^0.2.39",
     "@types/jest": "^30",

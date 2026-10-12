@@ -179,6 +179,7 @@ export class PosReportsStack extends cdk.Stack {
     // ---------------------------------------------------------------- Outputs
     // Written to cdk.outputs/outputs.json on deploy; the integration tests read them from there.
 
+    new cdk.CfnOutput(this, 'Region', { value: this.region });
     new cdk.CfnOutput(this, 'ApiUrl', { value: httpApi.apiEndpoint });
     new cdk.CfnOutput(this, 'BucketName', { value: bucket.bucketName });
     new cdk.CfnOutput(this, 'ParsedReportsTableName', { value: parsedReportsTable.tableName });
