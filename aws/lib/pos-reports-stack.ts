@@ -3,8 +3,6 @@ import * as cdk from 'aws-cdk-lib/core';
 import * as apigwv2 from 'aws-cdk-lib/aws-apigatewayv2';
 import { HttpLambdaIntegration } from 'aws-cdk-lib/aws-apigatewayv2-integrations';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
-import * as lambdaDestinations from 'aws-cdk-lib/aws-lambda-destinations';
-import { SqsEventSource } from 'aws-cdk-lib/aws-lambda-event-sources';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as s3Notifications from 'aws-cdk-lib/aws-s3-notifications';
 import * as sqs from 'aws-cdk-lib/aws-sqs';
@@ -130,11 +128,18 @@ export class PosReportsStack extends cdk.Stack {
     parseFunction.allow(['s3:PutObject'], [objectsUnder(OBJECT_PREFIX.attachments)]);
     parseFunction.allow(['dynamodb:PutItem'], [parsedReportsTable.tableArn]);
     parseFunction.allow(['sqs:SendMessage'], [calculationQueue.queueArn]);
+    // Lambda delivers failed async invocations to the dead-letter queue using the function's role.
+    parseFunction.allow(['sqs:SendMessage'], [parserDeadLetterQueue.queueArn]);
 
     calculateFunction.allow(['dynamodb:GetItem'], [parsedReportsTable.tableArn]);
     calculateFunction.allow(['s3:GetObject'], [objectsUnder(OBJECT_PREFIX.attachments)]);
     calculateFunction.allow(['s3:PutObject'], [objectsUnder(OBJECT_PREFIX.calculationResults)]);
     calculateFunction.allow(['dynamodb:PutItem'], [calculationResultsTable.tableArn]);
+    // The minimum the SQS event source mapping needs (same as AWS's AWSLambdaSQSQueueExecutionRole).
+    calculateFunction.allow(
+      ['sqs:ReceiveMessage', 'sqs:DeleteMessage', 'sqs:GetQueueAttributes'],
+      [calculationQueue.queueArn],
+    );
 
     statusFunction.allow(['dynamodb:Query'], [parsedReportsTable.tableArn, calculationResultsTable.tableArn]);
 
@@ -146,17 +151,18 @@ export class PosReportsStack extends cdk.Stack {
       { prefix: OBJECT_PREFIX.rawReports },
     );
 
+    // Wired explicitly rather than with SqsDestination / SqsEventSource: those helpers also grant
+    // sqs:GetQueueUrl and sqs:ChangeMessageVisibility, which are not needed. Permissions are granted above.
     parseFunction.function.configureAsyncInvoke({
       retryAttempts: PARSER_ASYNC_RETRY_ATTEMPTS,
-      onFailure: new lambdaDestinations.SqsDestination(parserDeadLetterQueue),
+      onFailure: { bind: () => ({ destination: parserDeadLetterQueue.queueArn }) },
     });
 
-    calculateFunction.function.addEventSource(
-      new SqsEventSource(calculationQueue, {
-        batchSize: 10,
-        reportBatchItemFailures: true,
-      }),
-    );
+    calculateFunction.function.addEventSourceMapping('CalculationQueueEventSource', {
+      eventSourceArn: calculationQueue.queueArn,
+      batchSize: 10,
+      reportBatchItemFailures: true,
+    });
 
     // -------------------------------------------------------------------- API
 

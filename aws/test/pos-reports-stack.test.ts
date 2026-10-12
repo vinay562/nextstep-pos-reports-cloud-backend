@@ -5,6 +5,9 @@ import * as cdk from 'aws-cdk-lib/core';
 import { Match, Template } from 'aws-cdk-lib/assertions';
 import { PosReportsStack } from '../lib/pos-reports-stack';
 
+/** Same feature flags as `cdk synth` / `cdk deploy`, so the tests see the template that actually gets deployed. */
+const CDK_CONTEXT = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'cdk.json'), 'utf8')).context;
+
 const LAMBDA_PROJECTS = [
   'NextStep.PosReports.Lambda.ReceivePosReport',
   'NextStep.PosReports.Lambda.ParsePosReport',
@@ -13,7 +16,7 @@ const LAMBDA_PROJECTS = [
 ];
 
 type PolicyStatement = { Action: string | string[]; Resource: unknown };
-type PolicyResource = { Properties: { PolicyDocument: { Statement: PolicyStatement[] } } };
+type PolicyResource = { Properties: { PolicyDocument: { Statement: PolicyStatement[] }; Roles: { Ref: string }[] } };
 
 /** Placeholder Lambda packages so the stack can be synthesized without running `dotnet publish`. */
 function createFakeArtifacts(): string {
@@ -29,11 +32,25 @@ function asArray<T>(value: T | T[]): T[] {
   return Array.isArray(value) ? value : [value];
 }
 
+const withoutLogicalIdHash = (logicalId: string) => logicalId.replace(/[0-9A-F]{8}$/, '');
+
+/** Readable form of a policy resource: { Fn::GetAtt: [Bucket…, Arn] } + '/pos/*' → 'PosReportsBucket/pos/*'. */
+function describeResource(resource: unknown): string {
+  const value = resource as { 'Fn::GetAtt'?: [string, string]; 'Fn::Join'?: [string, unknown[]] };
+  if (value['Fn::GetAtt']) {
+    return withoutLogicalIdHash(value['Fn::GetAtt'][0]);
+  }
+  if (value['Fn::Join']) {
+    return value['Fn::Join'][1].map((part) => (typeof part === 'string' ? part : describeResource(part))).join('');
+  }
+  return JSON.stringify(resource);
+}
+
 describe('PosReportsStack', () => {
   let template: Template;
 
   beforeAll(() => {
-    const app = new cdk.App();
+    const app = new cdk.App({ context: CDK_CONTEXT });
     const stack = new PosReportsStack(app, 'TestStack', { lambdaArtifactsPath: createFakeArtifacts() });
     template = Template.fromStack(stack);
   });
@@ -131,18 +148,83 @@ describe('PosReportsStack', () => {
   });
 
   describe('least privilege IAM', () => {
-    test('no statement in the template grants a wildcard action or a wildcard resource', () => {
-      const policies = Object.entries(template.findResources('AWS::IAM::Policy') as Record<string, PolicyResource>);
-      expect(policies.length).toBeGreaterThanOrEqual(4);
+    /**
+     * Flattens a function role's policy into sorted "action resource" pairs, so the assertion does not depend on
+     * how CDK merges or orders statements. Logical-id hashes are dropped: PosReportsBucket21419002 → PosReportsBucket.
+     */
+    const grantsOf = (rolePrefix: string): string[] => {
+      const policies = Object.values(template.findResources('AWS::IAM::Policy') as Record<string, PolicyResource>)
+        .filter((policy) => policy.Properties.Roles.some((role) => role.Ref.startsWith(rolePrefix)));
+      expect(policies).toHaveLength(1);
 
-      for (const [policyId, policy] of policies) {
-        for (const statement of policy.Properties.PolicyDocument.Statement) {
-          for (const action of asArray(statement.Action)) {
-            expect({ policyId, action }).toEqual({ policyId, action: expect.not.stringContaining('*') });
-          }
-          for (const resource of asArray(statement.Resource)) {
-            expect({ policyId, resource }).not.toEqual({ policyId, resource: '*' });
-          }
+      return policies[0].Properties.PolicyDocument.Statement
+        .flatMap((statement) =>
+          asArray(statement.Action).flatMap((action) =>
+            asArray(statement.Resource).map((resource) => `${action} ${describeResource(resource)}`),
+          ),
+        )
+        .sort();
+    };
+
+    test.each([
+      [
+        'ReceivePosReportRole',
+        [
+          'logs:CreateLogStream ReceivePosReportLogGroup',
+          'logs:PutLogEvents ReceivePosReportLogGroup',
+          's3:PutObject PosReportsBucket/pos/*',
+        ],
+      ],
+      [
+        'ParsePosReportRole',
+        [
+          'dynamodb:PutItem ParsedReportsTable',
+          'logs:CreateLogStream ParsePosReportLogGroup',
+          'logs:PutLogEvents ParsePosReportLogGroup',
+          's3:GetObject PosReportsBucket/pos/*',
+          's3:PutObject PosReportsBucket/attachment/*',
+          'sqs:SendMessage CalculationQueue',
+          'sqs:SendMessage ParserDeadLetterQueue',
+        ],
+      ],
+      [
+        'CalculateFlightStatusRole',
+        [
+          'dynamodb:GetItem ParsedReportsTable',
+          'dynamodb:PutItem CalculationResultsTable',
+          'logs:CreateLogStream CalculateFlightStatusLogGroup',
+          'logs:PutLogEvents CalculateFlightStatusLogGroup',
+          's3:GetObject PosReportsBucket/attachment/*',
+          's3:PutObject PosReportsBucket/results/*',
+          'sqs:DeleteMessage CalculationQueue',
+          'sqs:GetQueueAttributes CalculationQueue',
+          'sqs:ReceiveMessage CalculationQueue',
+        ],
+      ],
+      [
+        'GetFlightStatusRole',
+        [
+          'dynamodb:Query CalculationResultsTable',
+          'dynamodb:Query ParsedReportsTable',
+          'logs:CreateLogStream GetFlightStatusLogGroup',
+          'logs:PutLogEvents GetFlightStatusLogGroup',
+        ],
+      ],
+    ])('%s is granted exactly what the function uses', (rolePrefix, expectedGrants) => {
+      expect(grantsOf(rolePrefix)).toEqual(expectedGrants);
+    });
+
+    test('no statement in the template grants a wildcard action or a wildcard resource', () => {
+      const statements = Object.values(template.findResources('AWS::IAM::Policy') as Record<string, PolicyResource>)
+        .flatMap((policy) => policy.Properties.PolicyDocument.Statement);
+      expect(statements.length).toBeGreaterThan(0);
+
+      for (const statement of statements) {
+        for (const action of asArray(statement.Action)) {
+          expect(action).not.toContain('*');
+        }
+        for (const resource of asArray(statement.Resource)) {
+          expect(resource).not.toEqual('*');
         }
       }
     });
@@ -161,37 +243,6 @@ describe('PosReportsStack', () => {
       for (const role of Object.values(lambdaRoles)) {
         expect(role.Properties.ManagedPolicyArns).toBeUndefined();
       }
-    });
-
-    test('receive function may only write raw reports under pos/', () => {
-      template.hasResourceProperties('AWS::IAM::Policy', {
-        PolicyDocument: {
-          Statement: Match.arrayWith([
-            {
-              Action: 's3:PutObject',
-              Effect: 'Allow',
-              Resource: { 'Fn::Join': ['', [{ 'Fn::GetAtt': [Match.stringLikeRegexp('PosReportsBucket'), 'Arn'] }, '/pos/*']] },
-            },
-          ]),
-        },
-      });
-    });
-
-    test('status function may only query the two tables', () => {
-      template.hasResourceProperties('AWS::IAM::Policy', {
-        PolicyDocument: {
-          Statement: Match.arrayWith([
-            {
-              Action: 'dynamodb:Query',
-              Effect: 'Allow',
-              Resource: [
-                { 'Fn::GetAtt': [Match.stringLikeRegexp('ParsedReportsTable'), 'Arn'] },
-                { 'Fn::GetAtt': [Match.stringLikeRegexp('CalculationResultsTable'), 'Arn'] },
-              ],
-            },
-          ]),
-        },
-      });
     });
   });
 });

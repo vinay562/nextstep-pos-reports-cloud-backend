@@ -162,8 +162,9 @@ npm run typecheck         # TypeScript type check
 npm run synth             # build the Lambda packages and synthesize the CloudFormation template into cdk.out/
 ```
 
-The CDK tests check, among other things, that the S3 notification is limited to `pos/`, that the queue has a DLQ, and
-that **no IAM statement in the template uses a wildcard action or `Resource: "*"`**.
+The CDK tests check, among other things, that the S3 notification is limited to `pos/`, that the queue has a DLQ,
+that **each function's role contains exactly the expected list of actions and resources** (one extra permission fails
+the build), and that **no IAM statement in the template uses a wildcard action or `Resource: "*"`**.
 
 ---
 
@@ -264,10 +265,24 @@ it writes always matches the one the API returned, even if parsing happens after
 with no S3 reads, and its role needs no S3 permissions at all. The full self-contained result stays in S3.
 
 **Least-privilege IAM, enforced by tests.** Every permission is an explicit statement scoped to one S3 prefix, table or
-queue (for example, the receive function can only `s3:PutObject` on `pos/*`). The functions don't use the standard
-`AWSLambdaBasicExecutionRole`, because it allows writing to any log group. Each function's role can only write to its
-own log group. The two helper roles CDK creates internally (bucket notifications, auto-delete objects) use AWS's
-standard basic execution policy.
+queue, and limited to the API calls the code actually makes:
+
+| Function role | Allowed |
+|---|---|
+| ReceivePosReport | `s3:PutObject` on `pos/*` |
+| ParsePosReport | `s3:GetObject` on `pos/*` · `s3:PutObject` on `attachment/*` · `dynamodb:PutItem` on ParsedReports · `sqs:SendMessage` on CalculationQueue and ParserDeadLetterQueue |
+| CalculateFlightStatus | `dynamodb:GetItem` on ParsedReports · `s3:GetObject` on `attachment/*` · `s3:PutObject` on `results/*` · `dynamodb:PutItem` on CalculationResults · `sqs:ReceiveMessage`, `sqs:DeleteMessage`, `sqs:GetQueueAttributes` on CalculationQueue |
+| GetFlightStatus | `dynamodb:Query` on both tables (no S3 access) |
+
+Every role also has `logs:CreateLogStream` and `logs:PutLogEvents` on **its own** log group only, and no managed
+policies. The standard `AWSLambdaBasicExecutionRole` is not used because it allows writing to any log group.
+The SQS trigger and the parser's failure destination are wired explicitly instead of with CDK's `SqsEventSource` /
+`SqsDestination` helpers, because those add `sqs:GetQueueUrl` and `sqs:ChangeMessageVisibility`, which aren't needed.
+Each function can only be invoked by its own trigger (the API route, or this bucket in this account).
+
+*Exception:* the two helper Lambdas that CDK itself creates (one configures the bucket notification at deploy time,
+one empties the bucket on `cdk destroy`) use AWS's `AWSLambdaBasicExecutionRole`, which lets them write logs to any
+log group. They only run during deploy/destroy and aren't reachable from the API.
 
 **Timestamps as sortable strings.** Report times use second precision (`2026-09-04T12:05:00Z`). System times
 (receive, calculation) use millisecond precision (`…T15:12:30.123Z`), matching the spec. Each table only ever holds
