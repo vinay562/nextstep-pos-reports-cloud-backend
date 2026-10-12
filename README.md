@@ -152,8 +152,8 @@ Docker is **not** required: the Lambdas are built with `dotnet publish`. The AWS
 ## Install
 
 ```bash
-git clone <repository-url> nextstep-pos-reports
-cd nextstep-pos-reports
+git clone https://github.com/vinay562/nextstep-pos-reports-cloud-backend.git
+cd nextstep-pos-reports-cloud-backend
 npm ci                    # CDK, TypeScript and test tooling
 ```
 
