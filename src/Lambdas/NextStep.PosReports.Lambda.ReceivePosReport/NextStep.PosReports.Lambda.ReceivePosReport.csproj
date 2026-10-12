@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- POST /pos-reports: validates the raw report and stores it under pos/. -->
+  <ItemGroup>
+    <PackageReference Include="Amazon.Lambda.APIGatewayEvents" />
+  </ItemGroup>
+</Project>

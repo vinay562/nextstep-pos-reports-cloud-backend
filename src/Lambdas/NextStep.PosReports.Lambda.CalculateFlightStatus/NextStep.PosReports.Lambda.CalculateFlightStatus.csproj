@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- SQS trigger: calculates remaining flight time and fuel at arrival, stores the result. -->
+  <ItemGroup>
+    <PackageReference Include="Amazon.Lambda.SQSEvents" />
+  </ItemGroup>
+</Project>

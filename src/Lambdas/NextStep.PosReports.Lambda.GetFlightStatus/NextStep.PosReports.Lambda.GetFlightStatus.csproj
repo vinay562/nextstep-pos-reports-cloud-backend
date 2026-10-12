@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- GET /status/{flightId}: returns the latest known status of a flight. -->
+  <ItemGroup>
+    <PackageReference Include="Amazon.Lambda.APIGatewayEvents" />
+  </ItemGroup>
+</Project>

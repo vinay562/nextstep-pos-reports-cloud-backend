@@ -1,0 +1,26 @@
+# .NET
+bin/
+!aws/bin/
+obj/
+TestResults/
+*.user
+
+# Node / TypeScript
+node_modules/
+*.js
+!jest.config.js
+!jest.integration.config.js
+*.d.ts
+
+# CDK generated output
+cdk.out/
+cdk.artifacts/
+cdk.outputs/
+.cdk.staging/
+cdk.context.json
+
+# IDE / OS
+.idea/
+.vs/
+.vscode/
+.DS_Store

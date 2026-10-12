@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <PackageReference Include="NSubstitute" />
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Lambdas\NextStep.PosReports.Lambda.ReceivePosReport\NextStep.PosReports.Lambda.ReceivePosReport.csproj" />
+    <ProjectReference Include="..\..\src\Lambdas\NextStep.PosReports.Lambda.ParsePosReport\NextStep.PosReports.Lambda.ParsePosReport.csproj" />
+    <ProjectReference Include="..\..\src\Lambdas\NextStep.PosReports.Lambda.CalculateFlightStatus\NextStep.PosReports.Lambda.CalculateFlightStatus.csproj" />
+    <ProjectReference Include="..\..\src\Lambdas\NextStep.PosReports.Lambda.GetFlightStatus\NextStep.PosReports.Lambda.GetFlightStatus.csproj" />
+  </ItemGroup>
+</Project>

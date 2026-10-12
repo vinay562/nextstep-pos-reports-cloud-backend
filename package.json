@@ -1,0 +1,36 @@
+{
+  "name": "nextstep-pos-reports-cloud-backend",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Serverless POS report processing pipeline: C# Lambdas, AWS CDK (TypeScript) infrastructure.",
+  "scripts": {
+    "typecheck": "tsc",
+    "build:lambdas": "./scripts/build-lambdas.sh",
+    "test": "npm run test:dotnet && npm run test:cdk",
+    "test:dotnet": "dotnet test NextStep.PosReports.CloudBackend.sln",
+    "test:cdk": "jest",
+    "test:integration": "jest --config jest.integration.config.js",
+    "synth": "npm run build:lambdas && cdk synth",
+    "diff": "npm run build:lambdas && cdk diff",
+    "deploy": "npm run build:lambdas && cdk deploy --outputs-file cdk.outputs/outputs.json",
+    "destroy": "cdk destroy",
+    "cdk": "cdk"
+  },
+  "devDependencies": {
+    "@swc/core": "^1.15.0",
+    "@swc/jest": "^0.2.39",
+    "@types/jest": "^30",
+    "@types/node": "^22",
+    "aws-cdk": "2.1145.0",
+    "jest": "^30",
+    "tsx": "^4.23.0",
+    "typescript": "~7.0.2"
+  },
+  "dependencies": {
+    "aws-cdk-lib": "^2.272.0",
+    "constructs": "^10.8.1"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

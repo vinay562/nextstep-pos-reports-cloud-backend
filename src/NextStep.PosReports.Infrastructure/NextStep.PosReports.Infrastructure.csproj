@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- AWS adapters (S3, DynamoDB, SQS) behind the abstractions the Lambda functions depend on. -->
+  <ItemGroup>
+    <PackageReference Include="AWSSDK.S3" />
+    <PackageReference Include="AWSSDK.DynamoDBv2" />
+    <PackageReference Include="AWSSDK.SQS" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\NextStep.PosReports.Domain\NextStep.PosReports.Domain.csproj" />
+  </ItemGroup>
+</Project>

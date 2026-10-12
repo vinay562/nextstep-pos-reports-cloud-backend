@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- S3 trigger (pos/): parses the report, stores the attachment, records it and queues the calculation. -->
+  <ItemGroup>
+    <PackageReference Include="Amazon.Lambda.S3Events" />
+  </ItemGroup>
+</Project>

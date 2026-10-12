@@ -1,0 +1,3 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Pure business logic: parsing, identifiers and flight calculations. No AWS dependencies. -->
+</Project>
