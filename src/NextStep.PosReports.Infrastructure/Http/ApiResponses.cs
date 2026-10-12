@@ -11,13 +11,11 @@ public sealed record ErrorResponse(string Message);
 /// <summary>Helpers for API Gateway HTTP API (payload format 2.0) requests and responses.</summary>
 public static class ApiResponses
 {
-    private static readonly Dictionary<string, string> JsonHeaders = new() { ["Content-Type"] = "application/json" };
-
     public static APIGatewayHttpApiV2ProxyResponse Json<T>(HttpStatusCode statusCode, T body) =>
         new()
         {
             StatusCode = (int)statusCode,
-            Headers = JsonHeaders,
+            Headers = new Dictionary<string, string> { ["Content-Type"] = "application/json" },
             Body = JsonSerializer.Serialize(body, JsonDefaults.Options),
         };
 

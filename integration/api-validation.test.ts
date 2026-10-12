@@ -21,6 +21,13 @@ describe('API validation', () => {
     expect(response.body.message).toEqual(expect.any(String));
   });
 
+  test('GET /status with a malformed flight id returns 400', async () => {
+    const response = await api.getFlightStatus('not-a-flight-id');
+
+    expect(response.status).toBe(400);
+    expect(response.body).toEqual({ message: expect.any(String) });
+  });
+
   test('GET /status for an unknown flight returns 404', async () => {
     const response = await api.getFlightStatus('XX000020260101AAABBB');
 

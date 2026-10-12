@@ -1,6 +1,7 @@
 {
-  "app": "npx tsc && npx tsx aws/bin/pos-reports-app.ts",
+  "app": "npx tsc && ./scripts/build-lambdas.sh && npx tsx aws/bin/pos-reports-app.ts",
   "output": "cdk.out",
+  "outputsFile": "cdk.outputs/outputs.json",
   "watch": {
     "include": [
       "aws/**"

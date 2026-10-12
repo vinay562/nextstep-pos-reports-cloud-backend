@@ -11,9 +11,9 @@
     "test:cdk": "jest",
     "test:integration": "jest --config jest.integration.config.js",
     "smoke-test": "./scripts/smoke-test.sh",
-    "synth": "npm run build:lambdas && cdk synth",
-    "diff": "npm run build:lambdas && cdk diff",
-    "deploy": "npm run build:lambdas && cdk deploy --outputs-file cdk.outputs/outputs.json",
+    "synth": "cdk synth",
+    "diff": "cdk diff",
+    "deploy": "cdk deploy",
     "destroy": "cdk destroy",
     "cdk": "cdk"
   },

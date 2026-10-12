@@ -146,6 +146,13 @@ describe('PosReportsStack', () => {
       }
     });
 
+    test('API requests are rate limited', () => {
+      template.hasResourceProperties('AWS::ApiGatewayV2::Stage', {
+        StageName: '$default',
+        DefaultRouteSettings: { ThrottlingRateLimit: 50, ThrottlingBurstLimit: 100 },
+      });
+    });
+
     test('API exposes exactly POST /pos-reports and GET /status/{flightId}', () => {
       template.resourceCountIs('AWS::ApiGatewayV2::Route', 2);
       template.hasResourceProperties('AWS::ApiGatewayV2::Route', { RouteKey: 'POST /pos-reports' });

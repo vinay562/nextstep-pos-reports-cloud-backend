@@ -52,10 +52,10 @@ public sealed class GetFlightStatusFunctionTests
     [Fact]
     public async Task UnknownFlight_Returns404()
     {
-        var response = await _function.HandleAsync(RequestFor("XX1234"), new TestLambdaContext());
+        var response = await _function.HandleAsync(RequestFor("XX123420260904AAABBB"), new TestLambdaContext());
 
         Assert.Equal(404, response.StatusCode);
-        Assert.Equal("""{"message":"No status found for flight 'XX1234'."}""", response.Body);
+        Assert.Equal("""{"message":"No status found for flight 'XX123420260904AAABBB'."}""", response.Body);
     }
 
     [Fact]
@@ -71,6 +71,20 @@ public sealed class GetFlightStatusFunctionTests
         var logOutput = ((TestLambdaLogger)context.Logger).Buffer.ToString();
         Assert.Contains("Failed to look up status for flight", logOutput);
         Assert.Contains(SampleData.FlightId, logOutput);
+    }
+
+    [Theory]
+    [InlineData("hello")]
+    [InlineData("ul20420260904rgnbkk")]
+    [InlineData("UL204-20260904-RGN-BKK")]
+    [InlineData("UL20420260904RGNBKKEXTRACHARACTERS")]
+    public async Task MalformedFlightId_Returns400WithoutQueryingDynamoDb(string flightId)
+    {
+        var response = await _function.HandleAsync(RequestFor(flightId), new TestLambdaContext());
+
+        Assert.Equal(400, response.StatusCode);
+        await _calculationResultRepository.DidNotReceive().GetLatestAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await _parsedReportRepository.DidNotReceive().GetLatestAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]

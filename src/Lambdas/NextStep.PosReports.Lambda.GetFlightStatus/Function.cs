@@ -3,6 +3,7 @@ using Amazon.DynamoDBv2;
 using Amazon.Lambda.APIGatewayEvents;
 using Amazon.Lambda.Core;
 using Amazon.Lambda.Serialization.SystemTextJson;
+using NextStep.PosReports.Domain.Identifiers;
 using NextStep.PosReports.Infrastructure.Configuration;
 using NextStep.PosReports.Infrastructure.Http;
 using NextStep.PosReports.Infrastructure.Persistence;
@@ -46,6 +47,13 @@ public sealed class Function
             || string.IsNullOrWhiteSpace(flightId))
         {
             return ApiResponses.Error(HttpStatusCode.BadRequest, "The flightId path parameter is required.");
+        }
+
+        if (!FlightIdentifier.IsValid(flightId))
+        {
+            return ApiResponses.Error(
+                HttpStatusCode.BadRequest,
+                $"'{flightId}' is not a valid flight id, expected e.g. 'UL20420260904RGNBKK'.");
         }
 
         try

@@ -16,12 +16,14 @@ check a flight's status at any time.
 2. [API](#api)
 3. [Repository layout](#repository-layout)
 4. [Prerequisites](#prerequisites)
-5. [Build and test locally](#build-and-test-locally)
-6. [Deploy](#deploy)
-7. [Test the deployed stack](#test-the-deployed-stack)
-8. [Design decisions and trade-offs](#design-decisions-and-trade-offs)
-9. [Failure handling](#failure-handling)
-10. [Assumptions](#assumptions)
+5. [Install](#install)
+6. [Build and test locally](#build-and-test-locally)
+7. [Deploy to AWS](#deploy-to-aws)
+8. [Test on AWS](#test-on-aws)
+9. [Logs](#logs)
+10. [Design decisions and trade-offs](#design-decisions-and-trade-offs)
+11. [Failure handling](#failure-handling)
+12. [Assumptions](#assumptions)
 
 ---
 
@@ -58,7 +60,8 @@ The report `POS/UL204.FR RGN/TO BKK/041205/N1642.3E09612.5/450/12500/2800`, rece
 
 ## API
 
-The base URL is the `ApiUrl` stack output (see [Deploy](#deploy)).
+The base URL is the `ApiUrl` stack output (see [Deploy to AWS](#deploy-to-aws)). The API has no authentication and is
+rate limited to 50 requests/second (burst 100); requests over the limit get `429 Too Many Requests`.
 
 ### `POST /pos-reports`
 
@@ -84,6 +87,7 @@ curl "$API_URL/status/UL20420260904RGNBKK"
 |---|---|
 | `200` (calculated) | `{"flightId":"UL20420260904RGNBKK","status":"CALCULATED","timestamp":"2026-09-04T12:06:15.842Z","remainingFlightTimeMinutes":43,"estimatedFuelAtArrivalKg":10513,"lowFuelWarning":false}` |
 | `200` (not calculated yet) | `{"flightId":"UL20420260904RGNBKK","status":"PARSED","timestamp":"2026-09-04T12:05:00Z"}` |
+| `400` | `{"message":"'abc' is not a valid flight id, expected e.g. 'UL20420260904RGNBKK'."}` |
 | `404` | `{"message":"No status found for flight 'UL20420260904RGNBKK'."}` |
 
 `status` is one of `PARSED`, `CALCULATED` or `LOW_FUEL_WARNING` (estimated fuel at arrival is negative).
@@ -118,7 +122,7 @@ curl "$API_URL/status/UL20420260904RGNBKK"
 │   └── test/                                Template assertions (Jest)
 ├── integration/                             End-to-end tests against a deployed stack (Jest)
 ├── scripts/
-│   ├── build-lambdas.sh                     dotnet publish → cdk.artifacts/
+│   ├── build-lambdas.sh                     dotnet publish → cdk.artifacts/ (run automatically by cdk synth/deploy)
 │   └── smoke-test.sh                        Quick manual check of a deployment
 ├── docs/                                    Architecture diagram
 ├── NextStep.PosReports.CloudBackend.sln
@@ -134,32 +138,44 @@ curl "$API_URL/status/UL20420260904RGNBKK"
 
 | Tool | Version | Check |
 |---|---|---|
-| .NET SDK | 8.0.4xx | `dotnet --version` |
+| Git | any | `git --version` |
+| .NET SDK | 8 or later (the Lambdas target .NET 8) | `dotnet --version` |
 | Node.js | 22 or later | `node --version` |
-| AWS CLI | v2 | `aws --version` |
+| AWS CLI | v2 (only needed to deploy) | `aws --version` |
+| AWS account | with permission to create the resources above (only needed to deploy) | – |
 
-Docker is **not** required: the Lambdas are built with `dotnet publish`.
+Docker is **not** required: the Lambdas are built with `dotnet publish`. The AWS CDK CLI doesn't need a global install;
+`npm ci` installs it locally and it is run with `npx cdk`.
 
-The CDK CLI is installed locally by `npm ci`, so use `npx cdk …` or the npm scripts below.
+---
+
+## Install
+
+```bash
+git clone <repository-url> nextstep-pos-reports
+cd nextstep-pos-reports
+npm ci                    # CDK, TypeScript and test tooling
+```
+
+NuGet packages are restored automatically by the first `dotnet` build or test.
 
 ---
 
 ## Build and test locally
 
-No AWS account is needed for any of this.
+The pipeline itself runs on AWS. Locally you run the unit and infrastructure tests, which need no AWS account:
 
 ```bash
-npm ci                    # CDK, TypeScript and test tooling
-npm test                  # all local tests: .NET (xUnit) + CDK (Jest)
+npm test                  # everything below: .NET (xUnit) + CDK (Jest)
 ```
 
 Or separately:
 
 ```bash
-dotnet test               # Domain and Lambda handler tests
+dotnet test               # Domain logic (parsing, coordinates, haversine, keys) and Lambda handlers with mocks
 npm run test:cdk          # CDK template assertions
 npm run typecheck         # TypeScript type check
-npm run synth             # build the Lambda packages and synthesize the CloudFormation template into cdk.out/
+npx cdk synth             # build the Lambda packages and synthesize the CloudFormation template into cdk.out/
 ```
 
 The CDK tests check, among other things, that the S3 notification is limited to `pos/`, that the queue has a DLQ,
@@ -168,36 +184,41 @@ the build), and that **no IAM statement in the template uses a wildcard action o
 
 ---
 
-## Deploy
+## Deploy to AWS
 
 ### 1. One-time setup per AWS account and region
 
 ```bash
-aws configure sso         # or: aws login / aws configure
+aws configure sso         # or: aws login / aws configure, any way of getting CLI credentials
 aws sts get-caller-identity
 npx cdk bootstrap aws://<ACCOUNT_ID>/<REGION>
 ```
 
-The stack deploys to the account and region of your active AWS CLI profile (`CDK_DEFAULT_ACCOUNT` / `CDK_DEFAULT_REGION`).
-To target another region: `AWS_REGION=eu-west-1 npm run deploy`.
+The stack deploys to the account and region of your active AWS CLI profile. To target another region, prefix the
+commands with it, e.g. `AWS_REGION=eu-west-1 npx cdk deploy`.
 
 ### 2. Deploy
 
 ```bash
-npm ci
-npm run deploy
+npx cdk deploy
 ```
 
-This publishes the four Lambdas to `cdk.artifacts/`, runs `cdk deploy`, and writes the stack outputs
-(`ApiUrl`, `BucketName`, table names, queue URLs) to `cdk.outputs/outputs.json`. CDK asks you to confirm the IAM changes.
+`cdk deploy` builds the four Lambda packages (`scripts/build-lambdas.sh`, configured in `cdk.json`), deploys the
+stack, and writes the outputs (`ApiUrl`, `BucketName`, table names, queue URLs) to `cdk.outputs/outputs.json`.
+CDK lists the IAM changes and asks you to confirm them.
 
 ```bash
 export API_URL=$(node -p "require('./cdk.outputs/outputs.json').NextStepPosReports.ApiUrl")
 ```
 
-Other commands: `npm run diff` (preview changes) and `npm run destroy` (removes **everything**, including stored reports).
+| Command | Purpose |
+|---|---|
+| `npx cdk diff` | Preview changes before deploying |
+| `npx cdk destroy` | Remove the stack and **everything** in it, including stored reports |
 
-### Logs
+---
+
+## Logs
 
 Each function logs JSON to its own CloudWatch log group (2-week retention). Find them via the Lambda console →
 function → *Monitor* → *View CloudWatch logs*, or:
@@ -219,7 +240,17 @@ Errors are logged with the exception and then rethrown, so Lambda's error metric
 
 ---
 
-## Test the deployed stack
+## Test on AWS
+
+Manually, with the requests from [API](#api). The report's day must exist in the current month, so use today's:
+
+```bash
+curl -X POST "$API_URL/pos-reports" -H 'Content-Type: text/plain' \
+  --data "POS/UL204.FR RGN/TO BKK/$(date -u +%d)1205/N1642.3E09612.5/450/12500/2800"
+curl "$API_URL/status/<flightId from the response>"
+```
+
+Automated:
 
 ```bash
 npm run smoke-test        # submits the example report and polls the status until it is calculated
@@ -229,7 +260,7 @@ npm run test:integration  # full end-to-end suite (~5 minutes, see below)
 The integration tests (`integration/`) read `cdk.outputs/outputs.json` and use your AWS credentials to check what
 the pipeline stored. They cover:
 
-- **Validation:** malformed reports return 400 with a reason; an unknown flight returns 404.
+- **Validation:** malformed reports and flight ids return 400 with a reason; an unknown flight returns 404.
 - **Happy path:** the specification example through every stage (raw object, attachment, both tables, result
   object, status API) with the exact expected values.
 - **Low fuel:** a report without enough fuel is marked `LOW_FUEL_WARNING`.
@@ -293,15 +324,19 @@ the Lambda anyway.
 
 **202 Accepted** for `POST /pos-reports`: the report is accepted for asynchronous processing, not yet processed.
 
-**Build without Docker.** `dotnet publish -r linux-arm64` produces the packages directly, and arm64 (Graviton) is
-cheaper for Lambda. The trade-off is that the build is not containerized, so it relies on the local .NET SDK version
-pinned in `global.json`.
+**Rate limiting instead of authentication.** The spec defines no callers or auth, so the API is open. A stage-level
+throttle (50 req/s, burst 100) protects the pipeline and the AWS bill from a flood. `GET /status` also checks the
+flight id format before querying DynamoDB.
+
+**Build without Docker.** `cdk synth`/`cdk deploy` first run `dotnet publish -r linux-arm64`, which produces the
+packages directly; arm64 (Graviton) is cheaper for Lambda. The trade-off is that the build uses the local .NET SDK
+instead of a container.
 
 **Disposable by default.** The bucket and tables use `RemovalPolicy.DESTROY` (with auto-delete of objects) so
 `cdk destroy` leaves nothing behind. For production this would be `RETAIN` plus point-in-time recovery and versioning.
 
-**Not included (out of scope for this assessment):** API authentication (IAM/JWT authorizer), API throttling
-limits, alarms on DLQ depth, and X-Ray tracing. These would be the next additions for production use.
+**Next steps for production:** API authentication (IAM or JWT authorizer), CloudWatch alarms on dead-letter queue
+depth, and X-Ray tracing.
 
 ---
 
@@ -309,7 +344,8 @@ limits, alarms on DLQ depth, and X-Ray tracing. These would be the next addition
 
 | Situation | Behaviour |
 |---|---|
-| Malformed report | `400` with a reason. Nothing is stored. |
+| Malformed report or flight id | `400` with a reason. Nothing is stored. |
+| Too many requests | `429` from API Gateway (rate limit); the caller retries later. |
 | AWS error in `POST /pos-reports` | The Lambda fails and the caller gets `500` and can safely resubmit. |
 | Parser fails (e.g. S3/DynamoDB/SQS error) | S3 invokes the parser asynchronously. Lambda **retries twice**, then sends the event (with the error) to **ParserDeadLetterQueue** (14-day retention). Every parser step writes to deterministic keys, so retries are idempotent. |
 | Calculator fails for one message | The handler reports a **partial batch failure**: only that message returns to the queue. It is retried after the 90 s visibility timeout (6× the 15 s function timeout). |

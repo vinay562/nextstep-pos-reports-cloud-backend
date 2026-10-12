@@ -22,6 +22,8 @@ const CALCULATOR_TIMEOUT = cdk.Duration.seconds(15);
 const CALCULATION_MAX_RECEIVE_COUNT = 3;
 const PARSER_ASYNC_RETRY_ATTEMPTS = 2;
 const DEAD_LETTER_RETENTION = cdk.Duration.days(14);
+const API_RATE_LIMIT_PER_SECOND = 50;
+const API_BURST_LIMIT = 100;
 
 export interface PosReportsStackProps extends cdk.StackProps {
   /** Published Lambda packages (output of scripts/build-lambdas.sh). Defaults to <repo>/cdk.artifacts. */
@@ -44,7 +46,7 @@ export class PosReportsStack extends cdk.Stack {
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
       encryption: s3.BucketEncryption.S3_MANAGED,
       enforceSSL: true,
-      // Assessment / dev stack: `cdk destroy` removes everything, including stored reports.
+      // Disposable stack: `cdk destroy` removes everything, including stored reports.
       removalPolicy: cdk.RemovalPolicy.DESTROY,
       autoDeleteObjects: true,
     });
@@ -171,6 +173,14 @@ export class PosReportsStack extends cdk.Stack {
     const httpApi = new apigwv2.HttpApi(this, 'PosReportsApi', {
       description: 'Receives POS reports and serves flight status',
     });
+
+    // The API has no authentication, so cap the request rate to protect the pipeline and the bill from a flood.
+    // Set on the existing default stage (not a new stage) so CloudFormation updates it in place.
+    const defaultStage = httpApi.defaultStage!.node.defaultChild as apigwv2.CfnStage;
+    defaultStage.defaultRouteSettings = {
+      throttlingRateLimit: API_RATE_LIMIT_PER_SECOND,
+      throttlingBurstLimit: API_BURST_LIMIT,
+    };
 
     httpApi.addRoutes({
       path: '/pos-reports',

@@ -12,6 +12,19 @@ public sealed class ObjectKeysTests
         Assert.Equal(SampleReports.ExampleFlightId, flightId);
     }
 
+    [Theory]
+    [InlineData("UL20420260904RGNBKK", true)]
+    [InlineData("9W12320261231DELSIN", true)]
+    [InlineData("BA2490A20260101LHRJFK", true)]
+    [InlineData("UL20426094RGNBKK", false)]     // too few digits for flight number + date
+    [InlineData("ul20420260904rgnbkk", false)]  // lowercase
+    [InlineData("UL20420260904RGNBK", false)]   // destination too short
+    [InlineData("", false)]
+    public void FlightIdentifier_IsValid(string flightId, bool expected)
+    {
+        Assert.Equal(expected, FlightIdentifier.IsValid(flightId));
+    }
+
     [Fact]
     public void ForRawReport_SpecificationExample()
     {

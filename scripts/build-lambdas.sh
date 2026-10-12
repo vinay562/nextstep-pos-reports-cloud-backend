@@ -10,7 +10,7 @@ rm -rf "$artifacts_dir"
 
 for project_file in "$repo_root"/src/Lambdas/*/*.csproj; do
   project_name="$(basename "$project_file" .csproj)"
-  echo "Publishing $project_name"
+  echo "Publishing $project_name" >&2
   dotnet publish "$project_file" \
     --configuration Release \
     --runtime linux-arm64 \
@@ -20,4 +20,4 @@ for project_file in "$repo_root"/src/Lambdas/*/*.csproj; do
     --verbosity quiet
 done
 
-echo "Lambda packages written to $artifacts_dir"
+echo "Lambda packages written to $artifacts_dir" >&2
