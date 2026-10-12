@@ -51,7 +51,7 @@ describe('PosReportsStack', () => {
 
   beforeAll(() => {
     const app = new cdk.App({ context: CDK_CONTEXT });
-    const stack = new PosReportsStack(app, 'TestStack', { lambdaArtifactsPath: createFakeArtifacts() });
+    const stack = new PosReportsStack(app, 'NextStepPosReports', { lambdaArtifactsPath: createFakeArtifacts() });
     template = Template.fromStack(stack);
   });
 
@@ -111,6 +111,12 @@ describe('PosReportsStack', () => {
           maxReceiveCount: 3,
         },
       });
+    });
+
+    test('queue trigger keeps its deployed logical ID (Lambda rejects a second mapping for the same queue and function)', () => {
+      expect(Object.keys(template.findResources('AWS::Lambda::EventSourceMapping'))).toEqual([
+        'CalculateFlightStatusFunctionSqsEventSourceNextStepPosReportsCalculationQueue63F154256A2CE9F9',
+      ]);
     });
 
     test('calculator consumes the queue with partial batch failure reporting', () => {

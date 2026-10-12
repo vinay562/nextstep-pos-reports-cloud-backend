@@ -158,7 +158,9 @@ export class PosReportsStack extends cdk.Stack {
       onFailure: { bind: () => ({ destination: parserDeadLetterQueue.queueArn }) },
     });
 
-    calculateFunction.function.addEventSourceMapping('CalculationQueueEventSource', {
+    // Same construct ID that SqsEventSource uses, so the logical ID stays stable and CloudFormation updates the mapping
+    // in place. Lambda allows only one mapping per queue and function, so a replacement (create-then-delete) would fail.
+    calculateFunction.function.addEventSourceMapping(`SqsEventSource:${cdk.Names.nodeUniqueId(calculationQueue.node)}`, {
       eventSourceArn: calculationQueue.queueArn,
       batchSize: 10,
       reportBatchItemFailures: true,
